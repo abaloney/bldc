@@ -26,6 +26,8 @@
   #define HW_NAME					"75_300_R2"
 #elif defined(HW75_300_REV_1)
   #define HW_NAME					"75_300"
+#elif defined(HW75_100_REV_2_FLIPSKY)
+  #define HW_NAME         "75_100_R2_FLIPSKY"
 #else
   #error "Must define hardware type"
 #endif
@@ -33,7 +35,9 @@
 // HW properties
 #define HW_HAS_3_SHUNTS
 #define HW_HAS_PHASE_SHUNTS
-#define HW_HAS_PHASE_FILTERS
+#ifndef HW75_100_REV_2_FLIPSKY
+  #define HW_HAS_PHASE_FILTERS
+#endif
 
 // Macros
 #ifdef HW75_300_VEDDER_FIRST_PCB
@@ -190,7 +194,7 @@
 #define HW_UART_RX_PORT			GPIOB
 #define HW_UART_RX_PIN			11
 
-#if defined(HW75_300_REV_2) || defined(HW75_300_REV_3)
+#if defined(HW75_300_REV_2) || defined(HW75_300_REV_3) || defined(HW75_100_REV_2_FLIPSKY)
 // Permanent UART Peripheral (for NRF51)
 #define HW_UART_P_BAUD			115200
 #define HW_UART_P_DEV			SD4
