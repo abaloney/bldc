@@ -26,7 +26,7 @@
 #include "timeout.h"
 #include "lispbm.h"
 
-#define HEAP_SIZE				1536
+#define HEAP_SIZE				2048
 #define LISP_MEM_SIZE			LBM_MEMORY_SIZE_8K
 #define LISP_MEM_BITMAP_SIZE	LBM_MEMORY_BITMAP_SIZE_8K
 #define GC_STACK_SIZE			160
@@ -153,7 +153,7 @@ void lispif_process_cmd(unsigned char *data, unsigned int len,
 
 		lbm_get_heap_state(&heap_state);
 		if (heap_state.gc_num > 0) {
-			heap_use = 100.0 * (float)(HEAP_SIZE - heap_state.gc_recovered) / (float)HEAP_SIZE;
+			heap_use = 100.0 * (float)(HEAP_SIZE - heap_state.gc_last_free) / (float)HEAP_SIZE;
 		}
 
 		mem_use = 100.0 * (float)(lbm_memory_num_words() - lbm_memory_num_free()) / (float)lbm_memory_num_words();
@@ -173,13 +173,13 @@ void lispif_process_cmd(unsigned char *data, unsigned int len,
 		strcpy((char*)(send_buffer_global + ind), r_buf); ind += strlen(r_buf) + 1;
 
 		lbm_value curr = *lbm_get_env_ptr();
-		while (lbm_type_of(curr) == LBM_PTR_TYPE_CONS) {
+		while (lbm_type_of(curr) == LBM_TYPE_CONS) {
 			lbm_value key_val = lbm_car(curr);
-			if (lbm_type_of(lbm_car(key_val)) == LBM_VAL_TYPE_SYMBOL && lbm_is_number(lbm_cdr(key_val))) {
+			if (lbm_type_of(lbm_car(key_val)) == LBM_TYPE_SYMBOL && lbm_is_number(lbm_cdr(key_val))) {
 				const char *name = lbm_get_name_by_symbol(lbm_dec_sym(lbm_car(key_val)));
 				strcpy((char*)(send_buffer_global + ind), name);
 				ind += strlen(name) + 1;
-				buffer_append_float32_auto(send_buffer_global, lbm_dec_as_f(lbm_cdr(key_val)), &ind);
+				buffer_append_float32_auto(send_buffer_global, lbm_dec_as_float(lbm_cdr(key_val)), &ind);
 			}
 
 			if (ind > 300) {
@@ -195,7 +195,7 @@ void lispif_process_cmd(unsigned char *data, unsigned int len,
 			if (lbm_is_number(var) && name) {
 				strcpy((char*)(send_buffer_global + ind), name);
 				ind += strlen(name) + 1;
-				buffer_append_float32_auto(send_buffer_global, lbm_dec_as_f(var), &ind);
+				buffer_append_float32_auto(send_buffer_global, lbm_dec_as_float(var), &ind);
 
 				if (ind > 300) {
 					break;
@@ -244,8 +244,14 @@ void lispif_process_cmd(unsigned char *data, unsigned int len,
 						":continue\n"
 						"  Continue running LBM");
 				commands_printf_lisp(
-						":step\n"
-						"  Run single LBM step");
+						":step <num_steps>\n"
+						"  Run num_steps LBM steps");
+				commands_printf_lisp(
+						":undef <symbol_name>\n"
+						"  Undefine symbol");
+				commands_printf_lisp(
+						":verb\n"
+						"  Toggle verbose error messages");
 				commands_printf_lisp(" ");
 				commands_printf_lisp("Anything else will be evaluated as an expression in LBM.");
 				commands_printf_lisp(" ");
@@ -270,7 +276,7 @@ void lispif_process_cmd(unsigned char *data, unsigned int len,
 				char output[128];
 
 				commands_printf_lisp("Environment:\n");
-				while (lbm_type_of(curr) == LBM_PTR_TYPE_CONS) {
+				while (lbm_type_of(curr) == LBM_TYPE_CONS) {
 					lbm_print_value(output, sizeof(output), lbm_car(curr));
 					curr = lbm_cdr(curr);
 					commands_printf_lisp("  %s",output);
@@ -314,6 +320,11 @@ void lispif_process_cmd(unsigned char *data, unsigned int len,
 				commands_printf_lisp("undefining: %s", sym);
 				commands_printf_lisp("%s", lbm_undefine(sym) ? "Cleared bindings" : "No definition found");
 				lbm_continue_eval();
+			} else if (strncmp(str, ":verb", 5) == 0) {
+				static bool verbose_now = false;
+				verbose_now = !verbose_now;
+				lbm_set_verbose(verbose_now);
+				commands_printf_lisp("Verbose errors %s", verbose_now ? "Enabled" : "Disabled");
 			} else {
 				bool ok = true;
 				int timeout_cnt = 1000;
@@ -375,7 +386,7 @@ static bool start_lisp(bool print, bool load_code) {
 			lbm_set_usleep_callback(sleep_callback);
 			lbm_set_printf_callback(commands_printf_lisp);
 			lbm_set_ctx_done_callback(done_callback);
-			chThdCreateStatic(eval_thread_wa, sizeof(eval_thread_wa), NORMALPRIO, eval_thread, NULL);
+			chThdCreateStatic(eval_thread_wa, sizeof(eval_thread_wa), NORMALPRIO - 1, eval_thread, NULL);
 
 			lisp_thd_running = true;
 		} else {

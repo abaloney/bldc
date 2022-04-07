@@ -5,13 +5,14 @@ This is the VESC-integration of [lispBM](https://github.com/svenssonjoel/lispBM)
 ### Feature Overview
 
 * Development and testing in VESC Tool with variable live monitoring and plotting as well as CPU and memory monitoring.
+* There is a REPL in VESC Tool where code can be executed and tested live. You even have full access to the functions and bindings in the program you have uploaded.
 * Sandboxed environment, meaning that the Lisp code (hopefully) cannot freeze or crash the rest of the VESC code when it gets stuck or runs out of heap or stack memory.
 * The application runs on the VESC itself without the need for having VESC Tool connected and is stored in flash memory.
 * When a lisp-application is written to the VESC it is automatically started on each boot.
 
 ## Documentation
 
-Basics about LispBM are documented [here](http://svenssonjoel.github.io/lbmdoc/html/lbmref.html). The VESC-specific extensions are documented in this section. Note that VESC Tool includes a collection of examples that can be used as a starting point for using lisp on the VESC.
+Basics about LispBM are documented [here](lispBM/doc/lbmref.md). The VESC-specific extensions are documented in this section. Note that VESC Tool includes a collection of examples that can be used as a starting point for using lisp on the VESC.
 
 ### Various Commands
 
@@ -130,6 +131,14 @@ Get value from BMS. Examples:
 ```
 
 Get ADC voltage on channel ch (0, 1 or 2).
+
+#### get-adc-decoded
+
+```clj
+(get-adc-decoded ch)
+```
+
+Get decoded ADC value on channel ch (0 or 1). Decoded means that the voltage is mapped to the range 0 to 1 according to the configuration in the ADC app. Note that the ADC app must be running for this function to work. No throttle curve is applied to this value, but you can use the [throttle-curve](#throttle-curve) function to apply one if desired.
 
 #### systime
 
@@ -694,6 +703,13 @@ Converts x from radians to degrees.
 
 Rotate vector x1,x2,x3 around roll, pitch and yaw. optRev (1 or 0) will apply the rotation in reverse (apply the inverse of the rotation matrix) if set to 1.
 
+#### throttle-curve
+```clj
+(throttle-curve value accel brake mode)
+```
+
+Apply throttle curve on value. accel (range -1 to 1) is the curve constant for acceleration (when value is greater than 0) and brake (range -1 to 1) is the curve constant for braking (when value is less than 0). mode (0, 1 or 2) is the throttle curve mode. Negative curve constants mean that the throttle will be gentler in the beginning and more aggressive with towards the end and positive curve constants mean the opposite. The modes are 0: Exponential, 1: Natural and 2: Polynomial. You can have a look at the throttle curves in VESC Tool for the PPM, ADC or VESC Remote app and experiment with the mode and curve constants to see a plot of the response.
+
 ### Bit Operations
 
 #### bits-enc-int
@@ -922,6 +938,213 @@ Write state to pin. If the pin is set to an output 1 will set it to VCC and 0 to
 
 Read state of pin. Returns 1 if the pin is high, 0 otherwise.
 
+### Configuration
+
+The following selection of app and motor parameters can be read and set from LispBM:
+
+```clj
+'l-current-min          ; Minimum current in A (a negative value)
+'l-current-max          ; Maximum current in A
+'l-current-min-scale    ; Scaled minimum current, 0.0 to 1.0
+'l-current-max-scale    ; Scaled maximum current, 0.0 to 1.0
+'l-in-current-min       ; Minimum input current in A (a negative value)
+'l-in-current-max       ; Maximum input current in A
+'l-min-erpm             ; Minimum ERPM (a negative value)
+'l-max-erpm             ; Maximum ERPM
+'l-watt-min             ; Minimum power regen in W (a negative value)
+'l-watt-max             ; Maximum power regen in W
+'foc-current-kp         ; FOC current controller KP
+'foc-current-ki         ; FOC current controller KI
+'foc-motor-l            ; Motor inductance in microHenry
+'foc-motor-ld-lq-diff   ; D and Q axis inductance difference in microHenry
+'foc-motor-r            ; Motor resistance in milliOhm
+'foc-motor-flux-linkage ; Motor flux linkage in milliWeber
+'foc-observer-gain      ; Observer gain x1M
+'min-speed              ; Minimum speed in meters per second (a negative value)
+'max-speed              ; Maximum speed in meters per second
+'controller-id          ; VESC CAN ID
+```
+
+#### conf-set
+
+```clj
+(conf-set param value)
+```
+
+Set param to value. This can be done while the motor is running and it will be applied instantly. Note that the parameter won't be stored in flash, so it will be back to the old value on the next boot. To store all parameters that have been changed you can use [conf-store](#conf-store). Example:
+
+```clj
+(conf-set 'max-speed (/ 25 3.6)) ; Set the maximum speed to 25 km/h
+```
+
+#### conf-get
+
+```clj
+(conf-get param optDefault)
+```
+
+Get the value of param. optDefault is an optional argument that can be set to 1 to get the default value of param instead of the current value. Example:
+
+```clj
+(conf-get 'foc-motor-r) ; Get the motor resistance in milliOhm
+(conf-get 'controller-id 1) ; Get the default CAN ID of this VESC
+```
+
+#### conf-store
+
+```clj
+(conf-store)
+```
+
+Store the current configuration to flash. This will stop the motor.
+
+### Loops
+
+#### loopfor
+
+```clj
+(loopfor it start cond update body)
+```
+
+For-loop. it is the iterator, start is what it is initialized to, cond is the condition that has the be true for the loop to continue running, update is how to update the iterator after each iteration and body is the code to execute each iteration. The iterator can be accessed from within body. Example:
+
+```clj
+(loopfor i 0 (< i 5) (+ i 1)
+    (print i)
+)
+
+Output:
+0
+1
+2
+3
+4
+
+; Remember that multiple statements in the loop require a progn:
+(loopfor i 0 (< i 5) (+ i 1)
+    (progn
+        (print i)
+        (sleep 0.5)
+))
+```
+
+#### loopwhile
+
+```clj
+(loopwhile cond body)
+```
+
+While-loop. cond is the condition that has the be true for the loop to continue running and body is the code to execute each iteration. Example:
+
+```clj
+(define i 0)
+
+(loopwhile (< i 5)
+    (progn
+        (print i)
+        (define i (+ i 1))
+))
+
+Output:
+0
+1
+2
+3
+4
+```
+
+Another example that prints "Hello World" every two seconds:
+
+```clj
+(loopwhile t
+    (progn
+        (print "Hello World")
+        (sleep 2)
+))
+```
+
+#### looprange
+
+```clj
+(looprange it start end body)
+```
+
+Range-loop. Iterate it from start to end and evaluate body for each iteration. The iterator it can be accessed from within body. Example:
+
+```clj
+(looprange i 0 5
+    (print i)
+)
+
+Output:
+0
+1
+2
+3
+4
+
+; As with the other loops, multiple statements require a progn
+(looprange i 0 5
+    (progn
+        (print i)
+        (sleep 0.5)
+))
+```
+
+#### loopforeach
+
+```clj
+(loopforeach it lst body)
+```
+
+ForEach-loop. Iterate over every element in the list lst and evaluate body for each iteration. The iterator it can be accessed from within body. Example:
+
+```clj
+(loopforeach i '("AB" "C" "dE" "f")
+    (print i)
+)
+
+Output:
+AB
+C
+dE
+f
+
+; As with the other loops, multiple statements require a progn
+(loopforeach i '("AB" "C" "dE" "f")
+    (progn
+        (print i)
+        (sleep 0.5)
+))
+
+```
+
+#### break
+
+```clj
+(break retval)
+```
+
+break can be used to break out of a loop and return retval (the result of the loop will be retval, otherwise the result of the loop will be the result of the last expression in it). break works in all of the loops above. Example:
+
+```clj
+; Below we make a function to determine if
+; the list lst contains number num
+
+(defun contains (num lst)
+    (loopforeach it lst
+        (if (= it num)
+            (break t)
+            nil
+)))
+
+(contains 346 '(12 33 452 11 22 346 99 12))
+> t
+
+(contains 347 '(12 33 452 11 22 346 99 12))
+> nil
+```
+
 ### Useful Lisp Functions
 
 There are a number of lisp functions that can be used from lispBM in the VESC firmware. They will be loaded to the environment the first time they are used, so they do not use up memory before the first use.
@@ -967,11 +1190,11 @@ This example creates an anonymous function that takes one argument and returns t
 (iota n)
 ```
 
-Create list from 0 to n. Example:
+Create list from 0 to n, excluding n. Example:
 
 ```clj
 (iota 5)
-> (0 1 2 3 4 5)
+> (0 1 2 3 4)
 ```
 
 #### range
@@ -980,11 +1203,11 @@ Create list from 0 to n. Example:
 (range start end)
 ```
 
-Create a list from start to end. Example:
+Create a list from start to end, excluding end. Example:
 
 ```clj
 (range 2 8)
-> (2 3 4 5 6 7 8)
+> (2 3 4 5 6 7)
 ```
 
 #### foldl
