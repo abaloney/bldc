@@ -1,5 +1,5 @@
 /*
-	Copyright 2016 Benjamin Vedder	benjamin@vedder.se
+	Copyright 2022 Benjamin Vedder	benjamin@vedder.se
 
 	This file is part of the VESC firmware.
 
@@ -17,10 +17,9 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
     */
 
-#ifndef APPCONF_APPCONF_EXAMPLE_PPM_H_
-#define APPCONF_APPCONF_EXAMPLE_PPM_H_
+#ifndef HW_60_75_H_
+#define HW_60_75_H_
 
-// Use custom user application
-#define APPCONF_APP_TO_USE				APP_CUSTOM
+#include "hw_60_75_core.h"
 
-#endif
+#endif /* HW_60_75_H_ */

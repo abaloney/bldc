@@ -425,6 +425,12 @@ extern lbm_value lbm_cons(lbm_value car, lbm_value cdr);
  * is not cons or nil, the return value is enc_sym(SYM_TERROR) for type error.
  */
 extern lbm_value lbm_car(lbm_value cons);
+/** Accesses the car of the cdr of an cons cell
+ *
+ * \param c Value
+ * \return the cdr field or type error.
+ */
+extern lbm_value lbm_cadr(lbm_value c);
 /** Accesses the cdr field of an lbm_cons_t.
  *
  * \param cons Value
@@ -540,6 +546,11 @@ extern int lbm_gc_sweep_phase(void);
  * \return 1 for success of 0 for failure.
  */
 extern int lbm_heap_allocate_array(lbm_value *res, lbm_uint size, lbm_type type);
+/** Explicitly free an array.
+ *  This function needs to be used with care and knowledge.
+ * \param arr Array value.
+ */
+extern int lbm_heap_explicit_free_array(lbm_value arr);
 
 /** Query the type information of a value.
  *
@@ -794,6 +805,12 @@ static inline bool lbm_is_array(lbm_value x) {
           lbm_dec_sym(lbm_cdr(x)) == SYM_ARRAY_TYPE);
 }
 
+static inline bool lbm_is_stream(lbm_value x) {
+  return (lbm_type_of(x) == LBM_TYPE_STREAM &&
+          lbm_type_of(lbm_cdr(x)) == LBM_TYPE_SYMBOL &&
+          lbm_dec_sym(lbm_cdr(x)) == SYM_STREAM_TYPE);
+}
+
 static inline bool lbm_is_char(lbm_value x) {
   lbm_uint t = lbm_type_of(x);
   return (t == LBM_TYPE_CHAR);
@@ -840,6 +857,13 @@ static inline bool lbm_is_match_binder(lbm_value exp) {
            (lbm_dec_sym(lbm_car(exp)) == SYM_MATCH_CONS)));
 }
 
+static inline bool lbm_is_comma_qualified_symbol(lbm_value exp) {
+  return (lbm_is_list(exp) &&
+          (lbm_type_of(lbm_car(exp)) == LBM_TYPE_SYMBOL) &&
+          (lbm_dec_sym(lbm_car(exp)) == SYM_COMMA) &&
+          (lbm_type_of(lbm_car(lbm_cdr(exp))) == LBM_TYPE_SYMBOL));
+}
+
 static inline bool lbm_is_symbol(lbm_value exp) {
   return (lbm_type_of(exp) == LBM_TYPE_SYMBOL);
 }
@@ -872,5 +896,13 @@ static inline bool lbm_is_error(lbm_value v){
   return false;
 }
 
+extern lbm_heap_state_t lbm_heap_state;
+
+// ref_cell: returns a reference to the cell addressed by bits 3 - 26
+//           Assumes user has checked that is_ptr was set
+static inline lbm_cons_t* lbm_ref_cell(lbm_value addr) {
+  return &lbm_heap_state.heap[lbm_dec_ptr(addr)];
+  //  return (cons_t*)(heap_base + (addr & PTR_VAL_MASK));
+}
 
 #endif

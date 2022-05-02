@@ -10,9 +10,22 @@ This is the VESC-integration of [lispBM](https://github.com/svenssonjoel/lispBM)
 * The application runs on the VESC itself without the need for having VESC Tool connected and is stored in flash memory.
 * When a lisp-application is written to the VESC it is automatically started on each boot.
 
-## Documentation
+## Language Reference
 
-Basics about LispBM are documented [here](lispBM/doc/lbmref.md). The VESC-specific extensions are documented in this section. Note that VESC Tool includes a collection of examples that can be used as a starting point for using lisp on the VESC.
+[LispBM Language Reference](lispBM/doc/lbmref.md)
+
+## Programming Manual
+
+This is the work-in-progress programming manual for LispBM. Note that the examples in the manual use the REPL quite a lot. All of them also work in the VESC Tool REPL (which is below the console below the code editor) when you are connected to a VESC and will be executed on the VESC itself. The results of the commands will be printed in the console. From the VESC Tool REPL you also have access to all functions and variables in the program that you have uploaded to the VESC.
+
+[Chapter 1: Introduction to programming in LispBM](lispBM/doc/manual/ch1_introduction.md)  
+[Chapter 2: List Processing](lispBM/doc/manual/ch2_list_processing.md)
+
+## VESC-Specific Commands and Extensions
+
+The VESC-specific extensions are documented below. If you are reading this on GitHub there is an index in the upper left corner that can be used to navigate this document. It follows you as you scroll around and also includes a search function that filters all the titles in this document.
+
+Note that VESC Tool includes a collection of examples that can be used as a starting point for using LispBM on the VESC.
 
 ### Various Commands
 
@@ -257,37 +270,21 @@ Get button and joystick state of connected remote. Note that a remote app such a
 ; is-rev : Reverse active, 0 or 1
 ```
 
-#### eeprom-store-f
+#### sysinfo
 
 ```clj
-(eeprom-store-f addr number)
+(sysinfo param)
 ```
 
-Store float number on emulated eeprom at address addr. Addr range: 0 to 63. Note that this will stop the motor briefly as writing to the flash memory cannot be done at the same time as the motor is running.
-
-#### eeprom-read-f
+Read system info parameter param. Example:
 
 ```clj
-(eeprom-read-f addr)
+(sysinfo 'hw-name) ; Hardware name, e.g 60
+(sysinfo 'fw-ver) ; Firmware version as list (Major Minor BetaNum)
+(sysinfo 'has-phase-filters) ; t if hardware has phase filters
+(sysinfo 'uuid) ; STM32 UUID
+(sysinfo 'runtime) ; Total runtime in seconds
 ```
-
-Read float number on emulated eeprom at address addr. Addr range: 0 to 63. If nothing was stored on that address this function returns nil.
-
-#### eeprom-store-i
-
-```clj
-(eeprom-store-i addr number)
-```
-
-Same as eeprom-store-f, but store number as i32 instead of float.
-
-#### eeprom-read-i
-
-```clj
-(eeprom-read-i addr number)
-```
-
-Same as eeprom-read-i, but read number as i32 instead of float.
 
 ### Motor Set Commands
 
@@ -355,6 +352,13 @@ Set RPM speed control.
 ```
 
 Position control. Set motor position in degrees, range 0.0 to 360.0.
+
+#### foc-openloop
+```clj
+(foc-openloop current rpm)
+```
+
+Run FOC in open loop. Useful to test thermal properties of motors and power stages.
 
 ### Motor Get Commands
 
@@ -703,6 +707,13 @@ Converts x from radians to degrees.
 
 Rotate vector x1,x2,x3 around roll, pitch and yaw. optRev (1 or 0) will apply the rotation in reverse (apply the inverse of the rotation matrix) if set to 1.
 
+#### abs
+```clj
+(abs x)
+```
+
+Get the absolute value of x.
+
 #### throttle-curve
 ```clj
 (throttle-curve value accel brake mode)
@@ -803,13 +814,14 @@ The function (ix list ind) can be used to get an element from the list. Example:
 #### uart-start
 
 ```clj
-(uart-start baudrate)
+(uart-start baudrate optHd)
 ```
 
-Start the UART driver at baudrate on the COMM-port on the VESC. If any app is using the UART pins it will be stopped first. Example:
+Start the UART driver at baudrate on the COMM-port on the VESC. optHd is an optional argument that can be set to 'half-duplex to use half-duplex mode. In half-duplex mode only the tx-pin is used. If any app is using the UART pins it will be stopped first. Example:
 
 ```clj
-(uart-start 115200)
+(uart-start 115200) ; Start UART at 115200 baud in full duplex mode
+(uart-start 115200 'half-duplex) ; Start UART at 115200 baud in half duplex mode
 ```
 
 #### uart-write
@@ -860,10 +872,30 @@ Same as uart-read-bytes, but will return when the byte end is read.
 #### i2c-start
 
 ```clj
-(i2c-start)
+(i2c-start optRate optPinSda optPinScl)
 ```
 
-Start the I2C driver on the COMM-port on the VESC. If any app is using the I2C pins it will be stopped first.
+Start the I2C driver on the COMM-port on the VESC. If any app is using the I2C pins it will be stopped first. optRate is an optional argument for the I2C bitrate. optPinSda and optPinScl are optional arguments for using different SDA and SCL pins. Example:
+
+```clj
+(i2c-start 'rate-400k) ; 400 kbps and the default SDA and SDC pins
+(i2c-start 'rate-100k 'pin-swdio 'pin-swclk) ; 100 kbps and SWDIO and SWCLK as SDA and SCL
+
+; Available bitrates
+'rate-100k
+'rate-200k
+'rate-400k
+'rate-700k
+
+; Available pins
+'pin-rx
+'pin-tx
+'pin-swdio
+'pin-swclk
+'pin-hall1
+'pin-hall2
+'pin-hall3
+```
 
 #### i2c-tx-rx
 
@@ -891,7 +923,7 @@ Sends a sequence of bits in an attempt to restore the i2c-bus. Can be used if an
 
 ### GPIO
 
-These functions allow using GPIO-pins from lispBM. The UART and SWD pins can currently be used. NOTE: If you are using the SWD-pins a SWD-programmer won't work after that until the next reset.
+These functions allow using GPIO-pins from lispBM. The UART and SWD pins can currently be used. NOTE: If you are using the SWD-pins a SWD-programmer won't work after that until the next reset. If you are using the hall sensor pins make sure that sensor port mode is not set to anything that will communicate with encoders using those pins. Leaving the sensor port in hall sensor mode should be fine.
 
 #### gpio-configure
 
@@ -909,6 +941,9 @@ Configure GPIO pin to mode. Example:
 'pin-tx     ; TX-pin on the COMM-port
 'pin-swdio  ; IO-pin on the SWD-port
 'pin-swclk  ; CLK-pin on the SWD-port
+'pin-hall1  ; Sensor port hall1
+'pin-hall2  ; Sensor port hall2
+'pin-hall3  ; Sensor port hall3
 
 ; Available modes
 'pin-mode-out    ; Output
@@ -951,6 +986,10 @@ The following selection of app and motor parameters can be read and set from Lis
 'l-in-current-max       ; Maximum input current in A
 'l-min-erpm             ; Minimum ERPM (a negative value)
 'l-max-erpm             ; Maximum ERPM
+'l-min-vin              ; Minimum input voltage
+'l-max-vin              ; Maximum input voltage
+'l-min-duty             ; Minimum duty cycle
+'l-max-duty             ; Maximum duty cycle
 'l-watt-min             ; Minimum power regen in W (a negative value)
 'l-watt-max             ; Maximum power regen in W
 'foc-current-kp         ; FOC current controller KP
@@ -997,6 +1036,42 @@ Get the value of param. optDefault is an optional argument that can be set to 1 
 ```
 
 Store the current configuration to flash. This will stop the motor.
+
+### EEPROM (Nonvolatile Storage)
+
+Up to 64 variables (int32 or float) can be stored in a nonvolatile space reserved for LsipBM. These variables persist between power cycles and configuration changes, but not between firmware updates. Keep in mind that the motor will be stopped briefly when writing them and that they only can be written a limited number of times (about 100 000 writes) before wear on the flash memory starts to become an issue.
+
+#### eeprom-store-f
+
+```clj
+(eeprom-store-f addr number)
+```
+
+Store float number on emulated eeprom at address addr. Addr range: 0 to 63. Note that this will stop the motor briefly as writing to the flash memory cannot be done at the same time as the motor is running.
+
+#### eeprom-read-f
+
+```clj
+(eeprom-read-f addr)
+```
+
+Read float number on emulated eeprom at address addr. Addr range: 0 to 63. If nothing was stored on that address this function returns nil.
+
+#### eeprom-store-i
+
+```clj
+(eeprom-store-i addr number)
+```
+
+Same as eeprom-store-f, but store number as i32 instead of float.
+
+#### eeprom-read-i
+
+```clj
+(eeprom-read-i addr)
+```
+
+Same as eeprom-read-i, but read number as i32 instead of float.
 
 ### Loops
 
@@ -1576,6 +1651,8 @@ To allocate a byte array with 20 bytes and bind the symbol arr to it you can use
 (define arr (array-create 20))
 ```
 
+#### buflen
+
 The length of a byte array can be read with
 
 ```clj
@@ -1583,6 +1660,26 @@ The length of a byte array can be read with
 ```
 
 Which will return 20 for the array arr above.
+
+#### bufclear
+
+To clear a byte array the function bufclear can be used:
+
+```clj
+(bufclear arr optByte optStart optLen)
+```
+
+Where arr is the byte array to clear, optByte is the optional argument of what to clear with (default 0), optStart is the optional argument of which position to start clearing (default 0) and optLen is the optional argument of how many bytes to clear after start (default the entire array). Example:
+
+```clj
+(bufclear arr) ; Clear all of arr
+(bufclear arr 0xFF) ; Fill arr with 0xFF
+(bufclear arr 0 5) ; Clear from index 5 to the end
+(bufclear arr 0 5 10) ; Clear 10 bytes starting from index 5
+(bufclear arr 0xAA 5 10) ; Set 10 bytes to 0xAA starting from index 5
+```
+
+#### bufget-\[x\]
 
 To read data from the byte array you can use
 
@@ -1608,6 +1705,8 @@ By default the byte order is big endian. The byte order can also be specified as
 (bufget-i32 arr 6 little-endian)
 ```
 
+#### bufset-\[x\]
+
 Writing to the array can be done in a similar way
 
 ```clj
@@ -1624,11 +1723,23 @@ Here are some examples
 (bufset-u16 arr 0 420) ; write 420 to byte 0 and 1 as uint16
 (bufset-u32 arr 0 119) ; write 119 to byte 0 to 3 as uint32
 (bufset-f32 arr 0 3.14) ; write 3.14 to byte 0 to 3 as float32 (IEEE 754)
+(bufset-bit arr 14 1) ; Set bit 14 to 1 (note that this is a bitindex)
 ```
 
 As with bufget big endian is the default byte order and little-endian can be passed as the last argument to use little-endian byte order instead.
 
-**Note**  
+#### bufcpy
+
+Copy part of one array into another array.
+
+```clj
+(bufcpy arr1 ind1 arr2 ind2 len)
+```
+
+Copy len bytes from arr2 starting at ind2 to arr1 starting at ind1. Len will be truncated to ensure that nothing is read or written outside of the arrays.
+
+#### free
+
 Byte arrays will be de-allocated by the garbage collector on a regular basis, but can still use a lot of memory until then and large byte arrays cause a risk of running out of memory. It is possible to manually de-allocate the byte arrays when done with them by calling free
 
 ```clj

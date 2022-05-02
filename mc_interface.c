@@ -130,6 +130,7 @@ static volatile motor_if_state_t *motor_now(void);
 
 // Function pointers
 static void(*pwn_done_func)(void) = 0;
+static void(* volatile send_func_sample)(unsigned char *data, unsigned int len) = 0;
 
 // Threads
 static THD_WORKING_AREA(timer_thread_wa, 512);
@@ -499,6 +500,19 @@ mc_state mc_interface_get_state(void) {
 		break;
 	}
 
+	return ret;
+}
+
+mc_control_mode mc_interface_get_control_mode(void) {
+	mc_control_mode ret = CONTROL_MODE_NONE;
+	switch (motor_now()->m_conf.motor_type) {
+	case MOTOR_TYPE_FOC:
+		ret = mcpwm_foc_control_mode();
+		break;
+
+	default:
+		break;
+	}
 	return ret;
 }
 
@@ -1358,7 +1372,9 @@ float mc_interface_get_last_sample_adc_isr_duration(void) {
 	return m_last_adc_duration_sample;
 }
 
-void mc_interface_sample_print_data(debug_sampling_mode mode, uint16_t len, uint8_t decimation, bool raw) {
+void mc_interface_sample_print_data(debug_sampling_mode mode, uint16_t len, uint8_t decimation, bool raw, 
+		void(*reply_func)(unsigned char *data, unsigned int len)) {
+
 	if (len > ADC_SAMPLE_MAX_LEN) {
 		len = ADC_SAMPLE_MAX_LEN;
 	}
@@ -1372,6 +1388,7 @@ void mc_interface_sample_print_data(debug_sampling_mode mode, uint16_t len, uint
 		m_sample_int = decimation;
 		m_sample_mode = mode;
 		m_sample_raw = raw;
+		send_func_sample = reply_func;
 #ifdef HW_HAS_DUAL_MOTORS
 		m_sample_is_second_motor = motor_now() == &m_motor_2;
 #endif
@@ -1693,13 +1710,13 @@ void mc_interface_mc_timer_isr(bool is_second_motor) {
 	ledpwm_update_pwm();
 
 #ifdef HW_HAS_DUAL_MOTORS
-	volatile motor_if_state_t *motor = is_second_motor ? &m_motor_2 : &m_motor_1;
+	motor_if_state_t *motor = is_second_motor ? (motor_if_state_t*)&m_motor_2 : (motor_if_state_t*)&m_motor_1;
 #else
-	volatile motor_if_state_t *motor = &m_motor_1;
+	motor_if_state_t *motor = (motor_if_state_t*)&m_motor_1;
 	(void)is_second_motor;
 #endif
 
-	volatile mc_configuration *conf_now = &motor->m_conf;
+	mc_configuration *conf_now = (mc_configuration*)&motor->m_conf;
 	const float input_voltage = GET_INPUT_VOLTAGE();
 	UTILS_LP_FAST(motor->m_input_voltage_filtered, input_voltage, 0.02);
 
@@ -1823,7 +1840,7 @@ void mc_interface_mc_timer_isr(bool is_second_motor) {
 	}
 #endif
 
-	float f_samp = motor->m_f_samp_now;
+	float t_samp = 1.0 / motor->m_f_samp_now;
 
 	// Watt and ah counters
 	if (fabsf(current_filtered) > 1.0) {
@@ -1831,8 +1848,8 @@ void mc_interface_mc_timer_isr(bool is_second_motor) {
 		static float curr_diff_sum = 0.0;
 		static float curr_diff_samples = 0;
 
-		curr_diff_sum += current_in_filtered / f_samp;
-		curr_diff_samples += 1.0 / f_samp;
+		curr_diff_sum += current_in_filtered * t_samp;
+		curr_diff_samples += t_samp;
 
 		if (curr_diff_samples >= 0.01) {
 			if (curr_diff_sum > 0.0) {
@@ -1998,7 +2015,7 @@ void mc_interface_mc_timer_isr(bool is_second_motor) {
 
 			m_vzero_samples[m_sample_now] = zero;
 			m_curr_fir_samples[m_sample_now] = (int16_t)(current * (8.0 / FAC_CURRENT));
-			m_f_sw_samples[m_sample_now] = (int16_t)(f_samp / 10.0);
+			m_f_sw_samples[m_sample_now] = (int16_t)(0.1 / t_samp);
 			m_status_samples[m_sample_now] = mcpwm_get_comm_step() | (mcpwm_read_hall_phase() << 3);
 
 			m_sample_now++;
@@ -2659,7 +2676,7 @@ static THD_FUNCTION(sample_send_thread, arg) {
 			buffer[index++] = m_status_samples[ind_samp];
 			buffer[index++] = m_phase_samples[ind_samp];
 
-			commands_send_packet(buffer, index);
+			send_func_sample(buffer, index);
 		}
 	}
 }
