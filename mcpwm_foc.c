@@ -692,6 +692,12 @@ void mcpwm_foc_set_duty_noramp(float dutyCycle) {
 	mcpwm_foc_set_duty(dutyCycle);
 }
 
+//Traverse custom function
+float mcpwm_foc_get_speed_set(void) {
+	return get_motor_now()->m_speed_command_rpm;
+	//return get_motor_now()->m_speed_pid_set_rpm;
+}
+
 /**
  * Use PID rpm control. Note that this value has to be multiplied by half of
  * the number of motor poles.

@@ -36,6 +36,7 @@ int mcpwm_foc_isr_motor(void);
 void mcpwm_foc_stop_pwm(bool is_second_motor);
 void mcpwm_foc_set_duty(float dutyCycle);
 void mcpwm_foc_set_duty_noramp(float dutyCycle);
+float mcpwm_foc_get_speed_set(void);
 void mcpwm_foc_set_pid_speed(float rpm);
 void mcpwm_foc_set_pid_pos(float pos);
 void mcpwm_foc_set_current(float current);

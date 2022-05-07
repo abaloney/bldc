@@ -936,6 +936,11 @@ float mc_interface_get_rpm(void) {
 	return DIR_MULT * ret;
 }
 
+//Traverse custom function
+float mc_interface_get_rpm_set(void) {
+	return mcpwm_foc_get_speed_set();
+}
+
 /**
  * Get the amount of amp hours drawn from the input source.
  *

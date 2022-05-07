@@ -1192,9 +1192,9 @@ void comm_can_send_status4(uint8_t id, bool replace) {
 void comm_can_send_status5(uint8_t id, bool replace) {
 	int32_t send_index = 0;
 	uint8_t buffer[8];
-	buffer_append_int32(buffer, mc_interface_get_tachometer_value(false), &send_index);
+	buffer_append_int32(buffer, (int32_t)(mc_interface_get_rpm_set()), &send_index); //Traverse custom value. ie. the requested RPM setpoint get_motor_now()->m_speed_command_rpm  or get_motor_now()->m_speed_pid_set_rpm
 	buffer_append_int16(buffer, (int16_t)(mc_interface_get_input_voltage_filtered() * 1e1), &send_index);
-	buffer_append_int16(buffer, 0, &send_index); // Reserved for now
+	buffer_append_int16(buffer, (int16_t)(mc_interface_get_fault()), &send_index); // Traverse custom value
 	comm_can_transmit_eid_replace(id | ((uint32_t)CAN_PACKET_STATUS_5 << 8),
 			buffer, send_index, replace, 0);
 }
